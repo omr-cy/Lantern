@@ -1,139 +1,68 @@
-### 1️⃣ واجهة المستخدم (User API)
-**المسؤول:** `Content Delivery API`
-**الغرض:** قراءة البيانات فقط (Read Only).
+---
+share_link: https://share.note.sx/f6p2zzqx#29ZQ0F9rCGsgvLozSqkN4Ro2Htm5+wyEMank6Q/7Sh0
+share_updated: 2025-11-16T12:29:46+02:00
+aliases:
+---
+## Database Schema: 
 
-#### **أ) جلب قائمة الإدعاءات (List Claims)**
-*   **الرابط:** `GET /claims?limit=20&page=1`
-*   **جسم الطلب (Request Body):** *لا يوجد (فارغ).*
-*   **جسم الرد (Response Body):**
-    ```json
-    [
-      {
-        "claim_id": 21312,
-        "title": "عنوان الإدعاء الأول",
-        "summary": "ملخص قصير للإدعاء يظهر في القائمة...",
-        "image_url": "https://cdn.myapp.com/images/img1.jpg"
-      },
-      {
-        "claim_id": 21313,
-        "title": "عنوان الإدعاء الثاني",
-        "summary": "ملخص قصير...",
-        "image_url": "https://cdn.myapp.com/images/img2.jpg"
-      }
-      // ... يتم تكرارها حتى 20 عنصرًا
-    ]
-    ```
+### 1. Entities
 
-#### **ب) جلب تفاصيل إدعاء واحد (Get Single Claim)**
-*   **الرابط:** `GET /claims/21312`
-*   **جسم الطلب (Request Body):** *لا يوجد.*
-*   **جسم الرد (Response Body):**
-    ```json
-    {
-      "claim_id": 21312,
-      "title": "العنوان الكامل للإدعاء",
-      "summary": "الملخص...",
-      "image_url": "https://cdn.myapp.com/images/img_full.jpg",
-      "content": [
-        {
-          "header": "المقدمة",
-          "body": "نص الفقرة الأولى بالتفصيل..."
-        },
-        {
-          "header": "الأدلة",
-          "body": "نص الفقرة الثانية..."
-        },
-        {
-          "header": "الخاتمة",
-          "body": "نص الفقرة الثالثة..."
-        }
-      ]
-    }
-    ```
+#### 1.1 publishers
+| Column     | Type        | قيود / ملاحظات  |
+| ---------- | ----------- | --------------- |
+| auth_id    | UUID        | UNIQUE NOT NULL |
+| name       | TEXT        | NOT NULL        |
+|            |             |                 |
+| avatar_url | TEXT        | اختياري         |
+| bio        | TEXT        | اختياري         |
+| created_at | TIMESTAMPTZ | DEFAULT now()   |
+| updated_at | TIMESTAMPTZ | DEFAULT now()   |
+
+#### 1.2 claims
+| Column       | Type        | Notes                                     |
+| ------------ | ----------- | ----------------------------------------- |
+| id           | UUID        | PK                                        |
+| publisher_id | UUID        | FK → publishers.auth_id ON DELETE CASCADE |
+| title        | TEXT        | NOT NULL                                  |
+| body         | TEXT        | markdown                                  |
+| tags         | TEXT[]      | DEFAULT '{}' مصفوفة نصوص                  |
+| image_url    | TEXT        | اختياري                                   |
+| is_published | BOOLEAN     | DEFAULT true                              |
+| created_at   | TIMESTAMPTZ | DEFAULT now()                             |
+| updated_at   | TIMESTAMPTZ | DEFAULT now()                             |
+
+---
+## Endpoints
+
+> انت دلوقت عندك، اثنين او ثلاثة endpoints خلينا نقول:
+1. Claims: 
+    - `https://www.domain.com/claims`
+    - Claim( name or id ): `claims/{id}`
+    - no need to login
+    - simple list view
+    - title , tags , img, posted-at
+
+2. Publish:
+    - `www.domain.com/publish`
+    - `www.domain.com/publish/login`
+    - `www.domain.com/publish/register`
+    - need auth
+
+4. API:
+    - `www.domain.com/api`
 
 ---
 
-### 2️⃣ خدمة المصادقة (Authentication API)
-**المسؤول:** `Authentication Service`
-**الغرض:** التحقق من الهوية وإصدار الـ JWT.
+## API - REST Schema
 
-#### **أ) تسجيل دخول تقليدي (Email Login)**
-*   **الرابط:** `POST /login`
-*   **جسم الطلب (Request Body):**
-    ```json
-    {
-      "email": "admin@example.com",
-      "password": "secret_password_123"
-    }
-    ```
-*   **جسم الرد (Response Body):** *نفس الرد في الحالتين (أ و ب)*.
+`/api/claims`
+- GET: will return all claims
+- POST: will add claim into claims
 
-#### **ب) تسجيل دخول جوجل (Google Login)**
-*   **الرابط:** `POST /login/google`
-*   **جسم الطلب (Request Body):**
-    ```json
-    {
-      "google_token": "eyJhbGciOiJSUzI1NiIsIm..." // الرمز القادم من جوجل
-    }
-    ```
+`/api/claims/claim?id={id}`
+- GET: will get one claim with an id
+- PUT: will update or edit claim
+- DELETE: will delete the claim
 
-#### **ج) الرد الموحد للنجاح (Success Response)**
-*   **الحالة:** `200 OK`
-    ```json
-    {
-      "access_token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...", // JWT الخاص بنظامك
-      "token_type": "Bearer"
-    }
-    ```
-
----
-
-### 3️⃣ خدمة النشر والإدارة (Publishing API)
-**المسؤول:** `Publishing Service`
-**الغرض:** إنشاء المحتوى ورفع الملفات (محمي بـ Token).
-
-#### **أ) رفع صورة (Upload Image)**
-*   **الرابط:** `POST /upload`
-*   **الهيدر (Header):** `Authorization: Bearer <TOKEN>`
-*   **جسم الطلب (Request Body):** *ملف ثنائي (Binary File) - ليس JSON.*
-*   **جسم الرد (Response Body):**
-    ```json
-    {
-      "url": "https://cdn.myapp.com/images/photo_123.jpg"
-    }
-    ```
-
-#### **ب) إنشاء إدعاء جديد (Create Claim)**
-*   **الرابط:** `POST /claims`
-*   **الهيدر (Header):** `Authorization: Bearer <TOKEN>`
-*   **جسم الطلب (Request Body):** *لاحظ أننا نستخدم رابط الصورة الذي حصلنا عليه من الخطوة السابقة.*
-    ```json
-    {
-      "title": "عنوان الإدعاء الجديد",
-      "summary": "ملخص الإدعاء...",
-      "image_url": "https://cdn.myapp.com/images/photo_123.jpg",
-      "content": [
-        {
-          "header": "العنوان الفرعي الأول",
-          "body": "محتوى الفقرة الأولى..."
-        },
-        {
-          "header": "العنوان الفرعي الثاني",
-          "body": "محتوى الفقرة الثانية..."
-        }
-      ]
-    }
-    ```
-*   **جسم الرد (Response Body):**
-    *   **الحالة:** `201 Created`
-    ```json
-    {
-      "claim_id": 54879, // الرقم الجديد الذي تم إنشاؤه
-      "title": "عنوان الإدعاء الجديد",
-      "summary": "ملخص الإدعاء...",
-      "image_url": "https://cdn.myapp.com/images/photo_123.jpg",
-      "content": [
-         // ... نفس المحتوى المرسل
-      ]
-    }
-    ```
+`/api/publishers/`
+- POST: will Create a new publisher
